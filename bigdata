@@ -1,0 +1,190 @@
+# Load necessary libraries
+install.packages("ggplot2")
+install.packages("tm")
+install.packages("Matrix")
+install.packages("dplyr")
+install.packages("readr")
+install.packages("caTools")
+install.packages("glm2")
+library(dplyr) # For data manipulation
+library(readr) # For reading the dataset
+library(caTools) # For creating training and test samples library(glm2) # For fitting the logistic regression model library(ggplot2)
+library(GGally) library(Matrix) library(tm)
+# Phase 2: Data Preparation
+#2.1 Dataset description
+#2.2 Study of the distribution of individual variables #2.3 Data cleaning
+# -----------------------
+#2.1 Dataset description
+# Load the dataset
+data<- read.csv("/Users/user/OneDrive/Desktop/level 7 l/big data/healthcare-dataset-stroke-data-without.csv")
+#Checking the size of the dataset dim(data)
+#Number of attributes ncol(data)
+#Types of attributes str(data)
+#Number of Null values is.na(data) nonnul<-sum(is.na(data)) nonnul #----------------------------------
+#2.2 Study of the distribution of individual variables
+# Basic summary of all varibles in my dataset
+# This code adapts to different data types, providing relevant statistical summaries for
+# numerical, categorical, and binary (yes/no) variables in the dataset, enhancing data understanding and
+#rather than regular code summary(data),will not give us readable output,Try it in regular way the get will understand the difffrent
+#star here
+# Convert variables to logical data type data$hypertension <- as.logical(data$hypertension) data$heart_disease <- as.logical(data$heart_disease)
+data$stroke <- as.logical(data$stroke)
+# Get the names of all variables in dataset variable_names <- names(data)
+# Loop through each variable and print its summary for (variable in variable_names) {
+cat("Variable:", variable, "\n")
+if (is.numeric(data[[variable]])) { # For numeric variables print(summary(data[[variable]]))
+} else if (is.factor(data[[variable]]) || is.character(data[[variable]])) { # For factor or character variables
+print(table(data[[variable]]))
+} else if (is.logical(data[[variable]])) { # For logical variables print(table(data[[variable]]))
+} else {
+cat("Variable type not supported for summary.\n") cat("\n")
+} }
+#we Visualizing differnt type in dataset
+# Visualizing continuous variables using histograms hist(data$age, main="Age Distribution", xlab="Age", col="blue")
+hist(data$avg_glucose_level, main="Average Glucose Level Distribution", xlab="Average Glucose Level", col="green")
+hist(data$bmi, main="BMI Distribution", xlab="BMI", col="red") # 0 = NO , 1 = YES
+# Visualizing categorical variables using bar plots
+barplot(table(data$hypertension), main="Hypertension Distribution", xlab="Hypertension", ylab="Count", col="orange")
+barplot(table(data$heart_disease), main="Heart Disease Distribution", xlab="Heart Disease", ylab="Count", col="purple")
+barplot(table(data$stroke), main="Stroke Distribution", xlab="Stroke", ylab="Count", col="pink")
+#Distribution plot for readable varibles: plot(density(data$id)) plot(density(data$age)) plot(density(data$avg_glucose_level))
+# box plot
+# Create box plots for numerical variables
+boxplot(data$age) boxplot(data$avg_glucose_level) boxplot(data$bmi)
+#---------------------------- #2.3 Data Cleaning
+#Duplicted Data
+#so here will search about duplicated rows. # Check if any duplicated rows exist duplicated_rows <- duplicated(data)
+if (any(duplicated_rows)) {
+duplicated_data <- data[duplicated_rows, ] duplicated_indices <- which(duplicated_rows) cat("Duplicated rows found:\n") print(duplicated_data)
+cat("\nIndices of duplicated rows:\n")
+print(duplicated_indices) } else {
+cat("No duplicated rows found in the dataset.\n") }
+#Alternative way, we just want to make sure (ID) are unique and not duplicated and will not duplicated in a same person data
+#To count unique IDs I can use
+length(unique(data$id))
+#and to check if there are any duplicates I might do
+#which returns TRUE, if there are no duplicates (which there aren't). length(unique(data$id)) == nrow(data)
+# Check for missing values missing_values <- is.na(data)
+# Check if any missing values exist if (any(missing_values)) {
+col_missing <- colSums(missing_values) cat("Missing values found:\n") print(col_missing)
+} else {
+cat("No missing values found in the dataset.\n")
+}
+# Detect Outliers & Missing value and Handling
+#In Detect there are no single method is perfect for all scenarios
+#but the choice between these methods depends on the distribution of each variable.
+#1. Z-Score Method
+#2. IQR (Interquartile Range) Method
+#In Handlig there are multiple way to handle it , it’s depend on your diescion
+#we use "REMOVAL" approach to handling because there no effect in 7% of recored when we deleting on the dataset
+# start here step by step:
+# Print the original number of rows to prove before and after handling original_row_count <- nrow(data)
+cat("Original number of rows:", original_row_count, "\n")
+# detect_outliers function to return indices of outliers and print summary
+detect_outliers <- function(data, variable_name, method = "z-score", threshold = 3) {
+variable <- data[[variable_name]]
+outlier_indices <- logical(length(variable)) # Initialize a logical vector
+# Choose method for outlier detection and identify indices of outliers if (method == "z-score") {
+z_scores <- (variable - mean(variable, na.rm = TRUE)) / sd(variable, na.rm = TRUE)
+outlier_indices <- abs(z_scores) > threshold } else if (method == "iqr") {
+q1 <- quantile(variable, 0.25, na.rm = TRUE)
+q3 <- quantile(variable, 0.75, na.rm = TRUE)
+iqr <- q3 - q1
+outlier_indices <- variable < (q1 - threshold * iqr) | variable > (q3 + threshold * iqr)
+} else {
+stop("Invalid method specified")
+}
+# Print summary of outliers
+cat("Number of outliers detected in", variable_name, ":", sum(outlier_indices, na.rm = TRUE), "\n")
+return(outlier_indices) }
+# Detect and summarize outliers
+outlier_indices_avg_glucose <- detect_outliers(data, "avg_glucose_level", "z-score", 3)
+outlier_indices_bmi <- detect_outliers(data, "bmi", "iqr", 1.5)
+# Combine outlier indices
+combined_outlier_indices <- outlier_indices_avg_glucose | outlier_indices_bmi
+# Remove outliers
+data_cleaned <- data[!combined_outlier_indices, ]
+cat("Number of rows after removing outliers:", nrow(data_cleaned), "\n")
+# Remove rows with missing values ('bmi') data_cleaned <- na.omit(data_cleaned)
+# Print the number of rows after removing missing values
+cat("Number of rows after removing missing values:", nrow(data_cleaned), "\n")
+# Save the cleaned dataset to a new CSV file
+write.csv(data_cleaned, "cleaned_dataset.csv", row.names = FALSE) cat("Cleaned dataset saved as 'cleaned_dataset.csv'.\n")
+#-------------------------
+#2.4 Study of Pair-wise Relationships
+print("Pair-wise Relationships")
+pairs(~age + avg_glucose_level + bmi + stroke, data = data, panel =panel.smooth, main = "Pair-wise Scatter Plots") 
+#--------------------------
+#2.5 # Hypothesis Testing
+# Load the cleaned dataset
+cleaned_data <- read.csv("cleaned_dataset.csv")
+# Creating groups based on the 'stroke' variable from the cleaned dataset group1 <- cleaned_data$avg_glucose_level[cleaned_data$stroke == 0] group2 <- cleaned_data$avg_glucose_level[cleaned_data$stroke == 1]
+# Perform the t-test
+test <- t.test(group1, group2)
+# Output the test result and p-value print(test)
+p_value <- test$p.value print(p_value)
+# mean p-value
+mean_p_value <- mean(p_value) print(mean_p_value) #----------------------------------
+#Phase 3: model planning
+#Feature Enginnering
+# Load the cleaned dataset
+cleaned_healthcare <- read.csv("cleaned_dataset.csv")
+# Create a Corpus from the avg_glucose_level variable
+myCorpus <- Corpus(VectorSource(cleaned_healthcare$avg_glucose_level))
+# Create a Document-Term Matrix
+mydata <- DocumentTermMatrix(myCorpus)
+# Remove sparse terms
+mydata <- removeSparseTerms(mydata, 0.995)
+# Convert the Document-Term Matrix to a regular matrix mydata <- as.matrix(mydata)
+# Binning the average glucose level variable
+cleaned_healthcare$glucose_bin <- cut(cleaned_healthcare$avg_glucose_level,
+High"),
+breaks = c(0, 100, 150, 200, Inf),
+labels = c("Low", "Moderate", "High", "Very
+include.lowest = TRUE)
+# Summary of the binned glucose levels summary(cleaned_healthcare$glucose_bin)
+#------------------------
+#Phase 4: model building
+# Load the cleaned dataset
+cleaned_healthcare <- read.csv("cleaned_dataset.csv")
+# Create Training and Test Samples
+set.seed(123) # For reproducibility
+train_indices <- sample(nrow(cleaned_healthcare),
+nrow(cleaned_healthcare) * 0.7) # 70% of data for training train_data <- cleaned_healthcare[train_indices, ]
+test_data <- cleaned_healthcare[-train_indices, ]
+# Fit the Logistic Regression Model & model training
+model <- glm(stroke ~ avg_glucose_level + bmi, data = train_data, family = binomial())
+summary(model)
+# Make predictions using the trained model
+# Use the Model to Make Predictions
+predicted_probs <- predict(model, newdata = test_data, type = "response")
+predicted_labels <- ifelse(predicted_probs > 0.5, 1, 0) predicted labels with actual values (if available)
+# Confusion Matrix
+confusion_matrix <- table(predicted_labels, test_data$stroke) cat("Confusion Matrix:\n")
+print(confusion_matrix)
+# Compare
+# Calculate evaluation metrics
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix) cat("Accuracy:", accuracy, "\n")
+# Assuming the positive class is '1' (stroke)
+precision <- confusion_matrix[1, 2] / sum(confusion_matrix[, 2]) cat("Precision:", precision, "\n")
+recall <- confusion_matrix[1, 2] / sum(confusion_matrix[1, ]) cat("Recall:", recall, "\n")
+f1_score <- 2 * (precision * recall) / (precision + recall) cat("F1 Score:", f1_score, "\n")
+if ("actual_labels" %in% colnames(test_data)) { actual_labels <- test_data$actual_labels
+confusion_matrix <- table(predicted_labels, actual_labels) cat("Confusion Matrix:\n")
+print(confusion_matrix)
+# Calculate evaluation metrics
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix) cat("Accuracy:", accuracy, "\n")
+precision <- confusion_matrix[2, 2] / sum(confusion_matrix[, 2]) cat("Precision:", precision, "\n")
+recall <- confusion_matrix[2, 2] / sum(confusion_matrix[2, ]) cat("Recall:", recall, "\n")
+f1_score <- 2 * (precision * recall) / (precision + recall)
+cat("F1 Score:", f1_score, "\n")
+} else {
+# Only display predicted labels if actual labels are not available print(predicted_labels)
+}
+# Create a bar chart to represent the relationship between stroke and average glucose level
+ggplot(cleaned_healthcare) +
+geom_bar(aes(x = factor(stroke), y = avg_glucose_level, fill = factor(stroke)), stat = "summary", fun = "mean", position = "dodge") +
+labs(x = "Stroke", y = "Average Glucose Level",
+title = "Stroke Occurrence by Average Glucose Level") +
+scale_fill_manual(values = c("blue", "red"), labels = c("No Stroke", "Stroke")) +
+theme_minimal()
